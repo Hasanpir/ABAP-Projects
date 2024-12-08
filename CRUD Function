@@ -1,0 +1,287 @@
+DATA: gt_table    TYPE TABLE OF zhp_scarr2,
+      gs_table    TYPE zhp_scarr2,
+      gv_carrid   TYPE s_carr_id,
+      gv_carrname TYPE s_carrname,
+      gv_currcode TYPE s_currcode,
+      gv_url      TYPE s_carrurl.
+
+DATA: gt_fcat      TYPE lvc_t_fcat,
+      gs_layout    TYPE lvc_s_layo,
+      go_alvgrid   TYPE REF TO cl_gui_alv_grid,
+      go_container TYPE REF TO cl_gui_custom_container.
+
+
+START-OF-SELECTION.
+
+  CALL SCREEN 0100.
+
+&---------------------------------------------------------------------
+*&      Module  STATUS_0100  OUTPUT
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF_STATUS_277'.
+  SET TITLEBAR 'TITLE_277'.
+ENDMODULE.
+
+&---------------------------------------------------------------------
+*&      Module  USER_COMMAND_0100  INPUT
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+
+    WHEN 'GERI'.
+      LEAVE PROGRAM.
+
+    WHEN 'READ'.
+      PERFORM read.
+
+    WHEN 'DELETE'.
+      PERFORM delete.
+
+    WHEN 'UPDATE'.
+      PERFORM update.
+
+    WHEN 'CREATE'.
+      PERFORM create.
+
+    WHEN 'ALV'.
+      PERFORM select_data.
+      PERFORM fcat.
+      PERFORM layout.
+      PERFORM alv.
+
+  ENDCASE.
+
+ENDMODULE.
+&---------------------------------------------------------------------
+*&      Form  SELECT_DATA
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM select_data .
+
+  SELECT * FROM zhp_scarr2 INTO TABLE gt_table.
+*    WHERE carrid = gv_carrid.
+
+ENDFORM.
+&---------------------------------------------------------------------
+*&      Form  FCAT
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM fcat .
+
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_structure_name       = 'ZHP_SCARR2'
+      i_bypassing_buffer     = abap_true
+    CHANGING
+      ct_fieldcat            = gt_fcat
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+
+  IF sy-subrc IS NOT INITIAL.
+    LEAVE PROGRAM.
+  ENDIF.
+
+ENDFORM.
+&---------------------------------------------------------------------
+*&      Form  LAYOUT
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM layout .
+
+  gs_layout-zebra      = abap_true.
+  gs_layout-cwidth_opt = abap_true.
+  gs_layout-sel_mode   = 'A'.
+
+ENDFORM.
+&---------------------------------------------------------------------
+*&      Form  ALV
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM alv .
+
+  IF go_alvgrid IS INITIAL.
+    CREATE OBJECT go_container
+      EXPORTING
+        container_name              = 'CC_ALV'
+      EXCEPTIONS
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5
+        OTHERS                      = 6.
+
+    IF sy-subrc IS NOT INITIAL.
+      LEAVE PROGRAM.
+    ENDIF.
+
+    CREATE OBJECT go_alvgrid
+      EXPORTING
+        i_parent          = go_container
+      EXCEPTIONS
+        error_cntl_create = 1
+        error_cntl_init   = 2
+        error_cntl_link   = 3
+        error_dp_create   = 4
+        OTHERS            = 5.
+
+    IF sy-subrc IS NOT INITIAL.
+      LEAVE PROGRAM.
+    ENDIF.
+
+    go_alvgrid->set_table_for_first_display(
+      EXPORTING
+        is_layout                     = gs_layout
+      CHANGING
+        it_outtab                     = gt_table
+        it_fieldcatalog               = gt_fcat
+      EXCEPTIONS
+        invalid_parameter_combination = 1
+        program_error                 = 2
+        too_many_lines                = 3
+        OTHERS                        = 4 ).
+
+    IF sy-subrc IS NOT INITIAL.
+      LEAVE PROGRAM.
+    ENDIF.
+
+  ELSE.
+
+    go_alvgrid->check_changed_data( ).
+
+    go_alvgrid->refresh_table_display(
+      EXCEPTIONS
+        finished       = 1
+        OTHERS         = 2 ).
+
+    IF sy-subrc IS NOT INITIAL.
+      LEAVE PROGRAM.
+    ENDIF.
+
+  ENDIF.
+
+ENDFORM.
+&---------------------------------------------------------------------
+*&      Form  READ
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM read .
+  IF gv_carrid IS NOT INITIAL.
+    CLEAR: gs_table.
+    SELECT SINGLE * FROM zhp_scarr2
+    INTO gs_table WHERE carrid = gv_carrid.
+
+    IF gs_table IS NOT INITIAL.
+      gv_carrid       = gs_table-carrid.
+      gv_carrname     = gs_table-carrname.
+      gv_currcode     = gs_table-currcode.
+      gv_url          = gs_table-url.
+    ELSE.
+      MESSAGE 'Girilen ID''ye ait kayit bulunamadi.' TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ELSE.
+    MESSAGE 'ID hücresi bos olamaz' TYPE 'S' DISPLAY LIKE 'E'.
+
+  ENDIF.
+ENDFORM.
+&---------------------------------------------------------------------
+*&      Form  DELETE
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM delete .
+  IF gv_carrid IS NOT INITIAL.
+    DELETE FROM zhp_scarr2 WHERE carrid = gv_carrid.
+    IF sy-subrc IS INITIAL.
+      MESSAGE 'Satir silindi.' TYPE 'S'.
+    ELSE.
+      MESSAGE 'Satir silme basarisiz.' TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ELSE.
+    MESSAGE 'ID hücresi bos olamaz' TYPE 'S' DISPLAY LIKE 'E'.
+  ENDIF.
+ENDFORM.
+&---------------------------------------------------------------------
+*&      Form  UPDATE
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM update .
+  IF gv_carrid IS NOT INITIAL.
+    IF gv_carrname IS NOT INITIAL AND gv_currcode IS NOT INITIAL AND gv_url IS NOT INITIAL.
+      UPDATE zhp_scarr2 SET   carrname  = gv_carrname
+                              currcode  = gv_currcode
+                              url       = gv_url
+                          WHERE carrid = gv_carrid.
+      IF sy-subrc IS INITIAL.
+        MESSAGE 'Satir güncellendi.' TYPE 'S'.
+      ELSE.
+        MESSAGE 'Satir güncelleme basarisiz.' TYPE 'S' DISPLAY LIKE 'E'.
+      ENDIF.
+
+    ELSE.
+      MESSAGE 'Gerekli bilgileri doldurunuz' TYPE 'S' DISPLAY LIKE 'E'.
+    ENDIF.
+
+  ELSE.
+    MESSAGE 'ID hücresi bos olamaz' TYPE 'S' DISPLAY LIKE 'E'.
+  ENDIF.
+ENDFORM.
+&---------------------------------------------------------------------
+*&      Form  CREATE
+&---------------------------------------------------------------------
+*       text
+----------------------------------------------------------------------
+*  -->  p1        text
+*  <--  p2        text
+----------------------------------------------------------------------
+FORM create .
+  gs_table-carrid       = gv_carrid.
+  gs_table-carrname     = gv_carrname.
+  gs_table-currcode     = gv_currcode.
+  gs_table-url          = gv_url.
+
+
+  INSERT zhp_scarr2 FROM gs_table.
+
+  IF sy-subrc IS INITIAL.
+    MESSAGE 'Yeni kayit eklendi.' TYPE 'S'.
+  ELSE.
+    MESSAGE 'Yeni kayit ekleme islemi basarisiz oldu.' TYPE 'S' DISPLAY LIKE 'E'.
+  ENDIF.
+ENDFORM.
