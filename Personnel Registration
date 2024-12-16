@@ -1,0 +1,89 @@
+REPORT zhp_pers_alistirma.
+
+TABLES: zhp_pers_tbl.
+
+DATA: gt_table TYPE TABLE OF zhp_pers_tbl,
+      gs_pers  TYPE zhp_pers_tbl.
+
+DATA: gv_pers_id    TYPE zhp_pers_id_de,
+      gv_pers_ad    TYPE zhp_pers_ad_de,
+      gv_pers_soyad TYPE zhp_pers_soyad_de,
+      gv_pers_dtrh  TYPE zhp_pers_dtrh_de,
+      gv_pers_yas   TYPE zhp_pers_yas_de,
+      gv_pers_cins1 TYPE zhp_pers_cins_de,
+      gv_pers_cins2 TYPE zhp_pers_cins_de,
+      gv_pers_onay  TYPE zhp_pers_onay_de.
+
+
+
+
+START-OF-SELECTION.
+
+  CALL SCREEN 0100.
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'STATUS 0100'.
+  SET TITLEBAR 'PERS'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+    WHEN 'GERI'.
+      LEAVE PROGRAM.
+
+    WHEN '&SAVE'.
+
+      gs_pers-pers_id     = gv_pers_id.
+      gs_pers-pers_ad     = gv_pers_ad.
+      gs_pers-pers_soyad  = gv_pers_soyad.
+      gs_pers-pers_d_tarh = gv_pers_dtrh.
+      gs_pers-pers_yas    = gv_pers_yas.
+
+      IF gv_pers_cins1 = abap_true.
+        gs_pers-pers_cins   = 'E'.
+      ELSE.
+        gs_pers-pers_cins   = 'K'.
+      ENDIF.
+
+      IF  gv_pers_onay = abap_true.
+        gs_pers-pers_onay   = 'X'.
+      ENDIF.
+
+      DATA: lv_exists TYPE c LENGTH 1.
+
+* gv_pers_id veritabanında mevcut mu kontrol et
+      SELECT SINGLE pers_id FROM zhp_pers_tbl
+      WHERE pers_id = @gv_pers_id
+      INTO @DATA(lv_pers_id).
+
+      IF sy-subrc = 0. "Eğer kayıt bulunursa
+*        MESSAGE 'ID Numarası Mevcut, Yeni ID Giriniz' TYPE 'I' DISPLAY LIKE 'E'.
+        MESSAGE i000(zhp_mes).
+      ENDIF.
+
+      INSERT zhp_pers_tbl FROM gs_pers.
+      IF sy-subrc IS INITIAL.
+*        MESSAGE 'KAYIT BAŞARILI' TYPE 'I' DISPLAY LIKE 'S'.
+        MESSAGE i001(zhp_mes).
+
+      ENDIF.
+
+    WHEN '&CLEAR'.
+      CLEAR: gv_pers_id,
+             gv_pers_ad,
+             gv_pers_soyad,
+             gv_pers_dtrh,
+             gv_pers_yas,
+             gv_pers_cins1,
+             gv_pers_onay.
+
+  ENDCASE.
+ENDMODULE.
