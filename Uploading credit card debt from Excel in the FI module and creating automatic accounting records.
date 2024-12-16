@@ -1,0 +1,400 @@
+REPORT zhp_excel_ice_aktarma.
+
+SELECTION-SCREEN BEGIN OF BLOCK a1 WITH FRAME TITLE TEXT-001 NO INTERVALS.
+PARAMETERS: p_file   TYPE rlgrap-filename OBLIGATORY,
+            p_table  TYPE tabname NO-DISPLAY,
+            p_header AS CHECKBOX,
+            p_mandt  AS CHECKBOX.
+SELECTION-SCREEN END OF BLOCK a1.
+
+AT SELECTION-SCREEN OUTPUT.
+  LOOP AT SCREEN.
+    IF screen-name = 'P_TABLE' OR
+       screen-name = 'P_HEADER' OR
+       screen-name = 'P_MANDT'.
+      screen-active = 0.
+      MODIFY SCREEN.
+    ENDIF.
+  ENDLOOP.
+
+INITIALIZATION.
+  p_table  = 'ZHP_FI_KAYIT_DB'.
+  p_header = abap_true.
+  p_mandt  = abap_true.
+
+
+  TYPES: BEGIN OF gty_table,
+           row TYPE n LENGTH 4,
+         END OF gty_table.
+
+
+  DATA: gv_file_name           TYPE dbmsgora-filename,
+        gv_file_type           TYPE sdbad-funct,
+        gt_excel_itab_pre_conv TYPE STANDARD TABLE OF alsmex_tabline,
+        gt_row                 TYPE TABLE OF gty_table,
+        gt_table               TYPE TABLE OF zhp_fi_kayit_db,
+        gs_table               TYPE zhp_fi_kayit_db,
+        gt_fcat                TYPE lvc_t_fcat,
+        gs_layout              TYPE lvc_s_layo,
+        gr_data                TYPE REF TO data.
+
+  DATA: go_alvgrid   TYPE REF TO cl_gui_alv_grid,
+        go_container TYPE REF TO cl_gui_custom_container.
+
+  DATA: gt_selected_rows TYPE lvc_t_row,
+        gs_selected_row  LIKE LINE OF gt_table.
+
+  DATA: gt_accountgl      TYPE TABLE OF bapiacgl09,
+        gt_currency       TYPE TABLE OF bapiaccr09,
+        gt_return         TYPE TABLE OF bapiret2,
+        gv_documentheader TYPE bapiache09,
+        gs_accountgl      TYPE bapiacgl09,
+        gs_currency       TYPE bapiaccr09.
+
+
+
+  FIELD-SYMBOLS: <fs_table> TYPE STANDARD TABLE.
+
+  "Get File.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  CALL FUNCTION 'F4_FILENAME'
+    IMPORTING
+      file_name = p_file.
+
+START-OF-SELECTION.
+
+  PERFORM select_data.
+  PERFORM fcat.
+  PERFORM layout.
+
+  CALL SCREEN 0100.
+
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF_STATUS_100'.
+  SET TITLEBAR 'TITLE_100'.
+
+  PERFORM show_alv.
+
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+    WHEN 'BACK'.
+      LEAVE PROGRAM.
+
+    WHEN 'PROCESS'.
+
+      PERFORM process_selected_rows.
+
+    WHEN 'CLEAR'.
+
+      PERFORM clear_selected_rows.
+
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form SELECT_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM select_data .
+  "Find File.
+  gv_file_name = p_file.
+
+  CALL FUNCTION 'SPLIT_FILENAME'
+    EXPORTING
+      long_filename  = gv_file_name
+    IMPORTING
+      pure_extension = gv_file_type.
+
+  TRANSLATE gv_file_type TO UPPER CASE.
+
+  " Ckeck XLS or XLSX.
+  CHECK gv_file_type = 'XLS' OR gv_file_type = 'XLSX'.
+
+  " Read Excel.
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 1
+      i_end_col               = COND #( WHEN gv_file_type = 'XLS'  THEN 256
+                                        WHEN gv_file_type = 'XLSX' THEN  16834 )
+      i_end_row               = COND #( WHEN gv_file_type = 'XLS'  THEN 65536
+                                        WHEN gv_file_type = 'XLSX' THEN 1048576 )
+    TABLES
+      intern                  = gt_excel_itab_pre_conv
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+
+  IF sy-subrc IS NOT INITIAL.
+    LEAVE PROGRAM.
+  ENDIF.
+
+  "Excel dosyasında kolon baslıkları varsa bu hucreleri sil.
+  IF p_header = abap_true.
+    DELETE gt_excel_itab_pre_conv WHERE row = 1.
+    LOOP AT gt_excel_itab_pre_conv ASSIGNING FIELD-SYMBOL(<gs_line>).
+      <gs_line>-row = <gs_line>-row - 1.
+    ENDLOOP.
+  ENDIF.
+
+  "Excel dosyasında mandt yoksa manuel olarak ekle.
+  IF p_mandt IS INITIAL.
+    LOOP AT gt_excel_itab_pre_conv ASSIGNING FIELD-SYMBOL(<fs_line>).
+      <fs_line>-col = <fs_line>-col + 1.
+    ENDLOOP.
+
+    gt_row = VALUE #( FOR gs_line IN gt_excel_itab_pre_conv ( row = gs_line-row ) ).
+    SORT gt_row.
+    DELETE ADJACENT DUPLICATES FROM gt_row.
+
+    LOOP AT gt_row INTO DATA(gs_row).
+      APPEND INITIAL LINE TO gt_excel_itab_pre_conv ASSIGNING <fs_line>.
+      <fs_line>-row   = gs_row-row.
+      <fs_line>-col   = '0001'.
+      <fs_line>-value = sy-mandt.
+    ENDLOOP.
+    SORT  gt_excel_itab_pre_conv BY row col.
+  ENDIF.
+
+  "Girilen tablo tipinde bir data referansı oluştur.
+  CREATE DATA gr_data TYPE STANDARD TABLE OF (p_table).
+
+
+  "bu data referansının içindeki tabloyu field sembole assign et.
+  ASSIGN gr_data->* TO <fs_table>.
+
+  "Excel dosyasından gelen veriyi kullanarak tabloyu doldur.
+  LOOP AT gt_excel_itab_pre_conv ASSIGNING <gs_line> GROUP BY ( row = <gs_line>-row )
+                                                     INTO DATA(gt_group).
+    APPEND INITIAL LINE TO <fs_table> ASSIGNING FIELD-SYMBOL(<fs_str>).
+    LOOP AT GROUP gt_group INTO DATA(gs_group).
+      ASSIGN COMPONENT gs_group-col OF STRUCTURE <fs_str> TO FIELD-SYMBOL(<fs_hucre>).
+      IF sy-subrc IS INITIAL.
+        <fs_hucre> = gs_group-value.
+      ENDIF.
+    ENDLOOP.
+  ENDLOOP.
+
+  CLEAR gt_table.
+  APPEND LINES OF <fs_table> TO gt_table.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form FCAT
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM fcat .
+  "Field Catalog.
+  CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_structure_name       = p_table
+      i_bypassing_buffer     = abap_true
+    CHANGING
+      ct_fieldcat            = gt_fcat
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form LAYOUT
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM layout .
+  "Layout.
+  gs_layout-zebra      = abap_true.
+  gs_layout-cwidth_opt = abap_true.
+  gs_layout-sel_mode   = 'A'.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SHOW_ALV
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM show_alv .
+  "Show ALV.
+  IF go_alvgrid IS INITIAL.
+    CREATE OBJECT go_container
+      EXPORTING
+        container_name              = 'CC_ALV'
+      EXCEPTIONS
+        cntl_error                  = 1
+        cntl_system_error           = 2
+        create_error                = 3
+        lifetime_error              = 4
+        lifetime_dynpro_dynpro_link = 5
+        OTHERS                      = 6.
+    IF sy-subrc IS NOT INITIAL.
+      LEAVE PROGRAM.
+    ENDIF.
+
+    CREATE OBJECT go_alvgrid
+      EXPORTING
+        i_parent          = go_container
+      EXCEPTIONS
+        error_cntl_create = 1
+        error_cntl_init   = 2
+        error_cntl_link   = 3
+        error_dp_create   = 4
+        OTHERS            = 5.
+    IF sy-subrc IS NOT INITIAL.
+      LEAVE PROGRAM.
+    ENDIF.
+
+    CALL METHOD go_alvgrid->set_table_for_first_display(
+      EXPORTING
+        is_layout                     = gs_layout
+      CHANGING
+        it_outtab                     = gt_table
+        it_fieldcatalog               = gt_fcat
+      EXCEPTIONS
+        invalid_parameter_combination = 1
+        program_error                 = 2
+        too_many_lines                = 3
+        OTHERS                        = 4 ).
+    IF sy-subrc <> 0.
+
+    ENDIF.
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form PROCESS_SELECTED_ROWS
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM process_selected_rows .
+CALL METHOD go_alvgrid->get_selected_rows
+        IMPORTING
+          et_index_rows = gt_selected_rows.
+
+      SORT gt_selected_rows BY index DESCENDING.
+
+      "Process.
+      LOOP AT gt_selected_rows INTO DATA(gs_row_index).
+        READ TABLE gt_table INTO gs_selected_row INDEX gs_row_index-index.
+        IF sy-subrc = 0.
+
+          gv_documentheader-username = sy-uname.
+          gv_documentheader-comp_code = 'ANKA'.
+          gv_documentheader-doc_date = sy-datum.
+          gv_documentheader-pstng_date = sy-datum.
+          gv_documentheader-doc_type = 'SA'.
+
+          CLEAR gs_accountgl.
+          gs_accountgl-itemno_acc =   '0000000001'.
+          gs_accountgl-gl_account =  '3350000000'.
+          gs_accountgl-item_text =   gs_selected_row-kart_no.
+          APPEND gs_accountgl TO gt_accountgl.
+
+          CLEAR gs_accountgl.
+          gs_accountgl-itemno_acc =   '0000000002'.
+          gs_accountgl-gl_account =  '7300000333'.
+          gs_accountgl-item_text =   gs_selected_row-kart_no.
+          APPEND gs_accountgl TO gt_accountgl.
+
+          CLEAR gs_currency.
+          gs_currency-itemno_acc =   '0000000001'.
+          gs_currency-currency   = 'TRY'.
+          gs_currency-amt_doccur = -1 * gs_selected_row-tutar.
+          APPEND gs_currency TO gt_currency.
+
+          CLEAR gs_currency.
+          gs_currency-itemno_acc =   '0000000002'.
+          gs_currency-currency   = 'TRY'.
+          gs_currency-amt_doccur = gs_selected_row-tutar.
+          APPEND gs_currency TO gt_currency.
+
+
+          CALL FUNCTION 'BAPI_ACC_DOCUMENT_POST'
+            EXPORTING
+              documentheader = gv_documentheader
+            TABLES
+              accountgl      = gt_accountgl
+              currencyamount = gt_currency
+              return         = gt_return.
+
+
+          " CALL COMMIT
+          COMMIT WORK.
+
+          "Check For Errors.
+          IF sy-subrc IS INITIAL.
+            LOOP AT gt_return INTO DATA(gs_return).
+              IF gs_return-id = 'RW' AND gs_return-number = '605'.
+                MESSAGE i000(zhp_mes) WITH gs_return-message_v2.
+                DELETE gt_table INDEX gs_row_index-index.
+
+                " Update ALV
+                CALL METHOD go_alvgrid->refresh_table_display
+                  EXPORTING
+                    is_stable = VALUE lvc_s_stbl( row = abap_true col = abap_true ).
+              ELSE.
+                MESSAGE: TEXT-001 TYPE 'E'.
+              ENDIF.
+            ENDLOOP.
+          ELSE.
+            MESSAGE: TEXT-001 TYPE 'E'.
+          ENDIF.
+        ENDIF.
+        CLEAR gt_currency.
+        CLEAR gt_accountgl.
+      ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CLEAR_SELECTED_ROWS
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM clear_selected_rows .
+CALL METHOD go_alvgrid->get_selected_rows
+        IMPORTING
+          et_index_rows = gt_selected_rows.
+
+      SORT gt_selected_rows BY index DESCENDING.
+
+      "Process.
+      LOOP AT gt_selected_rows INTO data(ls_row_index).
+
+        DELETE gt_table INDEX ls_row_index-index.
+
+      ENDLOOP.
+
+      " Update ALV
+      CALL METHOD go_alvgrid->refresh_table_display
+        EXPORTING
+          is_stable = VALUE lvc_s_stbl( row = abap_true col = abap_true ).
+ENDFORM.
