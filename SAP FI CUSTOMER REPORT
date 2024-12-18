@@ -1,0 +1,569 @@
+REPORT zhp_fi_alistirma.
+
+INCLUDE zhp_fi_alistirma_top.
+INCLUDE zhp_fi_alistirma_pbo.
+INCLUDE zhp_fi_alistirma_pai.
+INCLUDE zhp_fi_alistirma_frm.
+
+
+START-OF-SELECTION.
+
+  CALL SCREEN 0100.
+
+ *&---------------------------------------------------------------------*
+*&  Include           ZHP_FI_ALISTIRMA_TOP
+*&---------------------------------------------------------------------*
+
+DATA: gv_number  TYPE char10,
+      gv_number2 TYPE char11,
+      gv_tarih1  TYPE datum,
+      gv_tarih2  TYPE datum,
+      gv_mus_no  TYPE char10,
+      gv_mus_v   TYPE char11.
+
+DATA: gt_musteri TYPE TABLE OF zhp_cust_pay_db,
+      gs_musteri TYPE zhp_cust_pay_db.
+
+DATA: gt_fieldcat TYPE lvc_t_fcat,
+      gs_fieldcat TYPE lvc_s_fcat,
+      gs_layout   TYPE lvc_s_layo.
+&---------------------------------------------------------------------*
+*&  Include           ZHP_FI_ALISTIRMA_PBO
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'PF_FI_100'.
+  SET TITLEBAR 'FI_MUST'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&  Include           ZHP_FI_ALISTIRMA_PAI
+*&---------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  CASE sy-ucomm.
+
+    WHEN 'GERI'.
+      LEAVE PROGRAM.
+
+    WHEN 'RUN'.
+      IF gv_number IS NOT INITIAL AND gv_mus_no = abap_true.
+        PERFORM gv_mus_no.
+      ELSEIF gv_number2 IS NOT INITIAL AND gv_mus_v = abap_true.
+        PERFORM gv_mus_v.
+      ELSE.
+        MESSAGE e002(zhp_mes).
+      ENDIF.
+
+    WHEN 'CANCEL'.
+      CLEAR gv_number.
+      CLEAR gv_number2.
+      CLEAR gv_tarih1.
+      CLEAR gv_tarih2.
+
+  ENDCASE.
+ENDMODULE.
+&---------------------------------------------------------------------*
+*&  Include           ZHP_FI_ALISTIRMA_FRM
+*&---------------------------------------------------------------------*
+
+
+*&---------------------------------------------------------------------*
+*&      Form  ALL_DATE_FULL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM all_date_full .
+  IF
+     gv_tarih1 IS NOT INITIAL
+     AND gv_tarih2 IS NOT INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+           bsid~wrbtr, bsid~waers, bsid~belnr, bsid~bldat,
+           bsid~zfbdt, bsid~zbd1t
+    FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+       INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+       WHERE kna1~kunnr = @gv_number
+       AND bsid~bldat BETWEEN @gv_tarih1 AND @gv_tarih2.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+
+*    "SHOW ALV-----------------------------------
+
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  ALL_DATE_EMPTY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM all_date_empty .
+  IF
+    gv_tarih1 IS INITIAL
+    AND gv_tarih2 IS INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+         bsid~wrbtr, bsid~waers, bsid~belnr, bsid~bldat,
+         bsid~zfbdt, bsid~zbd1t
+  FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+     INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+     WHERE kna1~kunnr = @gv_number.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+
+    "SHOW ALV------------------------------------------------------
+
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  ONLY_DATE2_FULL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM only_date2_full .
+  IF
+   gv_tarih1 IS INITIAL
+   AND gv_tarih2 IS NOT INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+         bsid~wrbtr, bsid~waers, bsid~belnr, bsid~bldat,
+         bsid~zfbdt, bsid~zbd1t
+  FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+     INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+     WHERE kna1~kunnr = @gv_number
+      AND bsid~bldat <= @gv_tarih2.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+
+    "SHOW ALV----------------------------------------------------
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  ONLY_DATE1_FULL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM only_date1_full .
+  IF
+    gv_tarih1 IS NOT INITIAL
+    AND gv_tarih2 IS INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+         bsid~wrbtr, bsid~waers, bsid~belnr, bsid~bldat,
+         bsid~zfbdt, bsid~zbd1t
+  FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+     INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+     WHERE kna1~kunnr = @gv_number
+      AND bsid~bldat >= @gv_tarih1.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+
+    "SHOW ALV-------------------------------------------------------
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  ALL_DATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM all_date .
+  IF
+    gv_tarih1 IS NOT INITIAL
+    AND gv_tarih2 IS NOT INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+           bsid~wrbtr, bsid~belnr, bsid~bldat, bsid~zfbdt, bsid~zbd1t
+    FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+       INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+       WHERE kna1~stcd2 = @gv_number2
+       AND bsid~bldat BETWEEN @gv_tarih1 AND @gv_tarih2.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+    "SHOW ALV--------------------------------------------------------
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  EMPTY_DATE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM empty_date .
+  IF
+   gv_tarih1 IS INITIAL
+   AND gv_tarih2 IS INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+         bsid~wrbtr, bsid~belnr, bsid~bldat, bsid~zfbdt, bsid~zbd1t
+  FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+     INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+     WHERE kna1~stcd2 = @gv_number2.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+
+    "SHOW ALV--------------------------------------------------------
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  ONEDATE_EMPTY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM onedate_empty .
+  IF
+    gv_tarih1 IS INITIAL
+    AND gv_tarih2 IS NOT INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+         bsid~wrbtr, bsid~belnr, bsid~bldat, bsid~zfbdt, bsid~zbd1t
+  FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+     INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+     WHERE kna1~stcd2 = @gv_number2
+      AND bsid~bldat <= @gv_tarih2.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+
+    "SHOW ALV-------------------------------------------------------------
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SECONDDATE_EMPTY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM seconddate_empty .
+  IF
+    gv_tarih1 IS NOT INITIAL
+    AND gv_tarih2 IS INITIAL.
+
+    SELECT kna1~kunnr, kna1~stcd2, kna1~name1,
+         bsid~wrbtr, bsid~belnr, bsid~bldat, bsid~zfbdt, bsid~zbd1t
+  FROM kna1 LEFT JOIN bsid ON kna1~kunnr EQ bsid~kunnr
+     INTO CORRESPONDING FIELDS OF TABLE @gt_musteri
+     WHERE kna1~stcd2 = @gv_number2
+      AND bsid~bldat >= @gv_tarih1.
+
+    IF gt_musteri IS NOT INITIAL.
+      LOOP AT gt_musteri INTO gs_musteri.
+        gs_musteri-pay_date = gs_musteri-zfbdt + gs_musteri-zbd1t.
+        MODIFY gt_musteri FROM gs_musteri.
+      ENDLOOP.
+    ENDIF.
+
+    "SHOW ALV-------------------------------------------------------------
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZHP_CUST_PAY_DB'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = gt_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    gs_layout-zebra      = abap_true.
+    gs_layout-cwidth_opt = abap_true.
+    gs_layout-sel_mode   = 'A'.
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout_lvc      = gs_layout
+        it_fieldcat_lvc    = gt_fieldcat
+      TABLES
+        t_outtab           = gt_musteri
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+  ENDIF.
+ENDFORM.
