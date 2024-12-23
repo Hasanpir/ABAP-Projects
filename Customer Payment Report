@@ -1,0 +1,194 @@
+INCLUDE zhp_fi_must_odeme_top.
+INCLUDE zhp_fi_must_odeme_f01.
+
+START-OF-SELECTION.
+
+  PERFORM get_data.
+  PERFORM report_preparation.
+  PERFORM alv.
+
+*& Include          ZHP_FI_MUST_ODEME_TOP
+*&---------------------------------------------------------------------*
+
+TYPES: BEGIN OF gty_cust_reprt,
+         bukrs   TYPE bukrs,
+         kunnr   TYPE kunnr,
+         name1   TYPE name1_gp,
+         wrbtr   TYPE wrbtr,
+         h_waers TYPE waers,
+         shkzg   TYPE shkzg,
+       END OF gty_cust_reprt.
+
+TYPES: BEGIN OF gty_report,
+         bukrs       TYPE bukrs,
+         kunnr       TYPE kunnr,
+         name1       TYPE name1_gp,
+         wrbtr_1     TYPE wrbtr,
+         h_waers_1   TYPE waers,
+         wrbtr_2     TYPE wrbtr,
+         h_waers_2   TYPE waers,
+         wrbtr_bal   TYPE wrbtr,
+         h_waers_bal TYPE waers,
+       END OF gty_report.
+
+DATA: gt_cust_reprt TYPE TABLE OF gty_cust_reprt,
+      gs_cust_reprt TYPE gty_cust_reprt,
+      gs_report     TYPE gty_report,
+      gt_report     TYPE TABLE OF gty_report,
+      gv_date       TYPE bseg-h_bldat.
+
+DATA: gt_fcat   TYPE lvc_t_fcat,
+      gs_fcat   TYPE lvc_s_fcat,
+      gs_layout TYPE lvc_s_layo.
+
+DATA: gv_deb_total TYPE wrbtr,
+      gv_crd_total TYPE wrbtr.
+
+
+SELECTION-SCREEN BEGIN OF BLOCK a1 WITH FRAME TITLE TEXT-001.
+PARAMETERS: p_bukrs  TYPE  bukrs   OBLIGATORY,
+            p_cus_no TYPE  kunnr.
+
+SELECT-OPTIONS: so_date FOR gv_date.
+
+SELECTION-SCREEN END OF BLOCK a1.
+
+ Include          ZHP_FI_MUST_ODEME_F01
+*&---------------------------------------------------------------------*
+
+
+*&---------------------------------------------------------------------*
+*& Form GET_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_data .
+  "Get Data
+  SELECT bseg~bukrs bseg~kunnr bseg~wrbtr bseg~h_waers bseg~shkzg
+         kna1~name1
+    FROM bseg LEFT JOIN kna1 ON ( bseg~kunnr = kna1~kunnr )
+    INTO CORRESPONDING FIELDS OF TABLE gt_cust_reprt
+    WHERE bseg~kunnr = p_cus_no
+     AND bseg~bukrs = p_bukrs
+     AND bseg~h_bldat IN so_date.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form REPORT_PREPARATION
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM report_preparation .
+  "Report preparation
+  LOOP AT gt_cust_reprt INTO gs_cust_reprt.
+    IF gs_cust_reprt-shkzg = 'S'.
+      gv_deb_total         = gs_cust_reprt-wrbtr + gv_deb_total.
+
+    ELSE.
+      gv_crd_total         = gs_cust_reprt-wrbtr + gv_crd_total.
+    ENDIF.
+  ENDLOOP.
+
+  gs_report-bukrs       = gs_cust_reprt-bukrs.
+  gs_report-kunnr       = gs_cust_reprt-kunnr.
+  gs_report-name1       = gs_cust_reprt-name1.
+  gs_report-wrbtr_1     = gv_deb_total.
+  gs_report-h_waers_1   = gs_cust_reprt-h_waers.
+  gs_report-wrbtr_2     = gv_crd_total.
+  gs_report-h_waers_2   = gs_cust_reprt-h_waers.
+  gs_report-wrbtr_bal   = gs_report-wrbtr_1 - gs_report-wrbtr_2.
+  gs_report-h_waers_bal = gs_cust_reprt-h_waers.
+  APPEND gs_report TO gt_report.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form ALV
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM alv .
+  "Fieldcatalog for ALV
+
+  gs_fcat-fieldname = 'BUKRS'.
+  gs_fcat-scrtext_l = 'Company Code'.
+  gs_fcat-scrtext_m = 'Company'.
+  gs_fcat-key       = abap_true.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'KUNNR'.
+  gs_fcat-scrtext_l = 'Customer Number'.
+  gs_fcat-scrtext_m = 'Customer No'.
+  gs_fcat-key       = abap_true.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'NAME1'.
+  gs_fcat-scrtext_l = 'Customer Name'.
+  gs_fcat-scrtext_m = 'Name'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'WRBTR_1'.
+  gs_fcat-scrtext_l = 'Debit Amount'.
+  gs_fcat-scrtext_m = 'D.Amount'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'H_WAERS_1'.
+  gs_fcat-scrtext_l = 'Currency'.
+  gs_fcat-scrtext_m = 'Currency'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'WRBTR_2'.
+  gs_fcat-scrtext_l = 'Credit Amount'.
+  gs_fcat-scrtext_m = 'C.Amount'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'H_WAERS_2'.
+  gs_fcat-scrtext_l = 'Currency'.
+  gs_fcat-scrtext_m = 'Currency'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'WRBTR_BAL'.
+  gs_fcat-scrtext_l = 'Balance Amount'.
+  gs_fcat-scrtext_m = 'BAL.Amount'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  gs_fcat-fieldname = 'H_WAERS_BAL'.
+  gs_fcat-scrtext_l = 'Currency'.
+  gs_fcat-scrtext_m = 'Currency'.
+  APPEND gs_fcat TO gt_fcat.
+  CLEAR: gs_fcat.
+
+  "Layout for ALv
+  gs_layout-zebra      = abap_true.
+  gs_layout-cwidth_opt = abap_true.
+  gs_layout-sel_mode   = 'A'.
+
+  "Show ALV
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+    EXPORTING
+      i_callback_program = sy-repid
+      is_layout_lvc      = gs_layout
+      it_fieldcat_lvc    = gt_fcat
+    TABLES
+      t_outtab           = gt_report
+    EXCEPTIONS
+      program_error      = 1
+      OTHERS             = 2.
+  IF sy-subrc <> 0.
+    LEAVE PROGRAM.
+  ENDIF.
+ENDFORM.
