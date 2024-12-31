@@ -1,0 +1,52 @@
+SELECTION-SCREEN BEGIN OF BLOCK a1 WITH FRAME TITLE TEXT-001 NO INTERVALS.
+PARAMETERS: p_date TYPE datum OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK a1.
+
+DATA: gv_day      TYPE char1,
+      gv_longtext TYPE langt,
+      gv_info     TYPE string.
+
+DATA: go_find_day TYPE REF TO zhp_alistirma_229_6_class.
+
+
+START-OF-SELECTION.
+
+  CREATE OBJECT go_find_day.
+
+  go_find_day->find_day_and_number(
+    EXPORTING
+      iv_date     =  p_date
+    IMPORTING
+      ev_longtext = gv_longtext
+      ev_day      = gv_day
+      ev_info     = gv_info ).
+
+
+--------------------------------------------------------------
+METHOD find_day_and_number.
+    "A-Gün adını ve gün farkını bulma
+    IF iv_date < sy-datum.
+
+      "A/1-gün sayısını hesaplama
+      numberday(
+        EXPORTING
+          iv_date = iv_date
+        IMPORTING
+          ev_day  = ev_day ).
+
+
+      "A/2-günün adını bulma
+      finddayname(
+        EXPORTING
+          iv_date     = iv_date
+        IMPORTING
+          ev_longtext = ev_longtext ).
+
+
+      CONCATENATE TEXT-002 ev_day  TEXT-003 iv_date ev_longtext TEXT-004 INTO ev_info SEPARATED BY space.
+      WRITE: / ev_info.
+
+    ELSE.
+      MESSAGE: TEXT-005 TYPE 'E'.
+    ENDIF.
+  ENDMETHOD.
