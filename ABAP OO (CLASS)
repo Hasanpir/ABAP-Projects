@@ -1,0 +1,83 @@
+SELECTION-SCREEN BEGIN OF BLOCK a1 WITH FRAME NO INTERVALS.
+PARAMETERS: p_scarr  RADIOBUTTON GROUP a,
+            p_spfli  RADIOBUTTON GROUP a,
+            p_sflght RADIOBUTTON GROUP a.
+
+SELECTION-SCREEN END OF BLOCK a1.
+
+DATA: gt_scarr   TYPE zhp_scarr_tt,
+      gt_spfli   TYPE TABLE OF spfli,
+      gt_sflight TYPE TABLE OF sflight.
+
+DATA: gt_fieldcat TYPE lvc_t_fcat,
+      gs_layout   TYPE lvc_s_layo.
+
+DATA: go_database TYPE REF TO zhp_alistirma_229_7_class.
+
+
+START-OF-SELECTION.
+
+  CREATE OBJECT go_database.
+
+  go_database->get_data(
+    EXPORTING
+      iv_scarr             = p_scarr
+      iv_spfli             = p_spfli
+      iv_sflight           = p_sflght
+      it_fcat              = gt_fieldcat
+      is_layout            = gs_layout
+      iv_colwidth_optimize = abap_true
+      iv_zebra             = abap_true
+    IMPORTING
+      et_scarr             = gt_scarr
+      et_spfli             = gt_spfli
+      et_sflight           = gt_sflight
+      et_fieldcat          = gt_fieldcat
+      es_layout            = gs_layout      ).
+
+
+----------------------------------------------------------------------------------------------
+S-24 transaction Code / CLASS NAME: ZHP_ALISTIRMA_229_7_CLASS
+
+METHOD get_data.
+    IF iv_scarr IS NOT INITIAL.
+      SELECT * FROM scarr INTO TABLE et_scarr.
+      alv_scarr(
+        EXPORTING
+          iv_zebra             = iv_zebra
+          iv_colwidth_optimize = iv_colwidth_optimize
+          it_fcat              = it_fcat
+          is_layout            = is_layout
+        IMPORTING
+          et_fieldcat          = et_fieldcat
+          es_layout            = es_layout
+          it_scarr             = et_scarr   ).
+
+    ELSEIF iv_spfli IS NOT INITIAL.
+      SELECT * FROM spfli INTO TABLE et_spfli.
+      alv_spfli(
+        EXPORTING
+          iv_zebra             = iv_zebra
+          iv_colwidth_optimize = iv_colwidth_optimize
+          it_fcat              = it_fcat
+          is_layout            = is_layout
+        IMPORTING
+          et_fieldcat          = et_fieldcat
+          es_layout            = es_layout
+          it_spfli             = et_spfli   ).
+
+    ELSEIF iv_sflight IS NOT INITIAL.
+      SELECT * FROM sflight INTO TABLE et_sflight.
+      alv_sflight(
+        EXPORTING
+          iv_zebra             = iv_zebra
+          iv_colwidth_optimize = iv_colwidth_optimize
+          it_fcat              = it_fcat
+          is_layout            = is_layout
+        IMPORTING
+          et_fieldcat          = et_fieldcat
+          es_layout            = es_layout
+          it_sflight           = et_sflight
+      ).
+    ENDIF.
+  ENDMETHOD.
