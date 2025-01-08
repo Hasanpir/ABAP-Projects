@@ -81,3 +81,45 @@ METHOD get_data.
       ).
     ENDIF.
   ENDMETHOD.
+
+---------------------------------------------------------------------------------------------
+S-24 Transaction Code / ALV METHOD: 
+
+
+METHOD alv_scarr.
+    "ALV / FCAT SCARR
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'SCARR'
+        i_bypassing_buffer     = 'X'
+      CHANGING
+        ct_fieldcat            = et_fieldcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+    "ALV / LAYOUT SCARR
+    es_layout-cwidth_opt    = iv_colwidth_optimize.
+    es_layout-zebra         = iv_zebra.
+    es_layout-sel_mode      = 'A'.
+
+
+    "ALV / DISPLAY SCARR
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY_LVC'
+      EXPORTING
+        i_callback_program = 'ZHP_ALISTIRMA_229_7_CLASS'
+        is_layout_lvc      = is_layout
+        it_fieldcat_lvc    = it_fcat
+      TABLES
+        t_outtab           = it_scarr
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+  ENDMETHOD.
